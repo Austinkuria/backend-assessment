@@ -213,7 +213,7 @@ class DeletePostTests(PostTestMixin, APITestCase):
 
 class TokenAuthenticationTests(PostTestMixin, APITestCase):
     def test_full_flow_with_token_header(self):
-        token = self.client.post("/api/auth/token/", {"username": "author", "password": "pass12345!"}).data["token"]
+        token = self.client.post("/api/v1/auth/token/", {"username": "author", "password": "pass12345!"}).data["token"]
         self.client.force_authenticate(None)
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
@@ -226,13 +226,18 @@ class OpenAPISchemaTests(PostTestMixin, APITestCase):
     def test_schema_and_swagger_ui_endpoints_load_without_auth(self):
         self.client.force_authenticate(None)
 
-        schema_res = self.client.get("/api/schema/", headers={"Accept": "application/json"})
+        schema_res = self.client.get("/api/v1/schema/", headers={"Accept": "application/json"})
         self.assertEqual(schema_res.status_code, status.HTTP_200_OK)
-        self.assertIn("/api/posts/", schema_res.data["paths"])
+        self.assertIn("/api/v1/posts/", schema_res.data["paths"])
 
-        swagger_res = self.client.get("/api/docs/")
+        swagger_res = self.client.get("/api/v1/docs/")
         self.assertEqual(swagger_res.status_code, status.HTTP_200_OK)
 
-        redoc_res = self.client.get("/api/redoc/")
+        redoc_res = self.client.get("/api/v1/redoc/")
         self.assertEqual(redoc_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.client.get("/").status_code, status.HTTP_302_FOUND)
+
+        health_res = self.client.get("/api/v1/health/")
+        self.assertEqual(health_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(health_res.data, {"status": "ok", "database": "ok"})
 

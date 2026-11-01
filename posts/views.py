@@ -55,12 +55,12 @@ class PostViewSet(viewsets.ModelViewSet):
     """
     CRUD for posts.
 
-    list:     GET    /api/posts/            (optional ?author=<user id>)
-    create:   POST   /api/posts/            (requires Idempotency-Key header)
-    retrieve: GET    /api/posts/{id}/
-    update:   PUT    /api/posts/{id}/       (author only, optional If-Match)
-    partial:  PATCH  /api/posts/{id}/       (author only, optional If-Match)
-    destroy:  DELETE /api/posts/{id}/       (author only, optional If-Match)
+    list:     GET    /api/v1/posts/            (optional ?author=<user id>)
+    create:   POST   /api/v1/posts/            (requires Idempotency-Key header)
+    retrieve: GET    /api/v1/posts/{id}/
+    update:   PUT    /api/v1/posts/{id}/       (author only, optional If-Match)
+    partial:  PATCH  /api/v1/posts/{id}/       (author only, optional If-Match)
+    destroy:  DELETE /api/v1/posts/{id}/       (author only, optional If-Match)
     """
 
     serializer_class = PostSerializer

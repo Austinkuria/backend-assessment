@@ -18,10 +18,11 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-The API runs at http://127.0.0.1:8000/api/.
-- **Swagger UI (interactive docs):** http://127.0.0.1:8000/api/docs/
-- **ReDoc:** http://127.0.0.1:8000/api/redoc/
-- **OpenAPI 3 schema:** http://127.0.0.1:8000/api/schema/
+The API runs at http://127.0.0.1:8000/api/v1/.
+- **Swagger UI (interactive docs):** http://127.0.0.1:8000/api/v1/docs/ (opening http://127.0.0.1:8000/ redirects here)
+- **ReDoc:** http://127.0.0.1:8000/api/v1/redoc/
+- **OpenAPI 3 schema:** http://127.0.0.1:8000/api/v1/schema/
+- **Health check:** http://127.0.0.1:8000/api/v1/health/ (also `/health/`)
 
 ### Run the tests
 
@@ -44,11 +45,11 @@ python manage.py test
 
 ## API documentation
 
-Base URL: `/api/`. All request and response bodies are JSON. Every `/api/posts/` endpoint needs an authenticated user, so send `Authorization: Token <token>`.
+Base URL: `/api/v1/`. All request and response bodies are JSON. Every `/api/v1/posts/` endpoint needs an authenticated user, so send `Authorization: Token <token>`.
 
 ### Authentication
 
-#### `POST /api/auth/register/`
+#### `POST /api/v1/auth/register/`
 ```json
 { "username": "austin", "email": "austin@uni.ac.ke", "password": "s3cure-Passw0rd!" }
 ```
@@ -58,7 +59,7 @@ Base URL: `/api/`. All request and response bodies are JSON. Every `/api/posts/`
 ```
 **400** for an invalid or duplicate username or a weak password (Django's password validators run).
 
-#### `POST /api/auth/token/`
+#### `POST /api/v1/auth/token/`
 ```json
 { "username": "austin", "password": "s3cure-Passw0rd!" }
 ```
@@ -90,20 +91,20 @@ Base URL: `/api/`. All request and response bodies are JSON. Every `/api/posts/`
 
 | Method | Path | Who | Success |
 |---|---|---|---|
-| `GET` | `/api/posts/` | any authenticated user | `200` paginated list, newest first |
-| `POST` | `/api/posts/` | any authenticated user | `201` created post |
-| `GET` | `/api/posts/{id}/` | any authenticated user | `200` post + `ETag` |
-| `PUT` | `/api/posts/{id}/` | author only | `200` updated post (title and content both required) |
-| `PATCH` | `/api/posts/{id}/` | author only | `200` updated post (any subset of fields) |
-| `DELETE` | `/api/posts/{id}/` | author only | `204` no body |
+| `GET` | `/api/v1/posts/` | any authenticated user | `200` paginated list, newest first |
+| `POST` | `/api/v1/posts/` | any authenticated user | `201` created post |
+| `GET` | `/api/v1/posts/{id}/` | any authenticated user | `200` post + `ETag` |
+| `PUT` | `/api/v1/posts/{id}/` | author only | `200` updated post (title and content both required) |
+| `PATCH` | `/api/v1/posts/{id}/` | author only | `200` updated post (any subset of fields) |
+| `DELETE` | `/api/v1/posts/{id}/` | author only | `204` no body |
 
-#### `GET /api/posts/`
+#### `GET /api/v1/posts/`
 Query parameters: `page` (default 1, `PAGE_SIZE = 10` per page), `author=<user id>` (optional filter).
 ```json
-{ "count": 31, "next": "http://.../api/posts/?page=2", "previous": null, "results": [ { "...post..." } ] }
+{ "count": 31, "next": "http://.../api/v1/posts/?page=2", "previous": null, "results": [ { "...post..." } ] }
 ```
 
-#### `POST /api/posts/`
+#### `POST /api/v1/posts/`
 Headers: **`Idempotency-Key: <unique string, e.g. a UUID>`** (required, max 255 chars)
 ```json
 { "title": "Library hours extended", "content": "Open until midnight." }
@@ -113,7 +114,7 @@ Headers: **`Idempotency-Key: <unique string, e.g. a UUID>`** (required, max 255 
 - **400** for validation errors or a missing or invalid `Idempotency-Key`.
 - **422** if the key was already used for a *different* payload.
 
-#### `PUT` / `PATCH /api/posts/{id}/`
+#### `PUT` / `PATCH /api/v1/posts/{id}/`
 Optional header: **`If-Match: "<version>"`** (accepts `"3"`, `3`, `W/"3"`, `*`).
 - **200** with the updated post and its new `ETag`.
 - **412 Precondition Failed** if `If-Match` is stale. The body includes the current post so the client can reconcile:
@@ -121,7 +122,7 @@ Optional header: **`If-Match: "<version>"`** (accepts `"3"`, `3`, `W/"3"`, `*`).
   { "detail": "This post has been modified since you last fetched it. ...", "current": { "...post..." } }
   ```
 
-#### `DELETE /api/posts/{id}/`
+#### `DELETE /api/v1/posts/{id}/`
 Optional header: `If-Match: "<version>"`.
 - **204** on success, and also when the author **retries** a delete that already happened.
 - **412** if `If-Match` is stale.
@@ -141,20 +142,20 @@ Optional header: `If-Match: "<version>"`.
 ### Example session (curl)
 
 ```bash
-TOKEN=$(curl -s -X POST localhost:8000/api/auth/register/ -H "Content-Type: application/json" \
+TOKEN=$(curl -s -X POST localhost:8000/api/v1/auth/register/ -H "Content-Type: application/json" \
   -d '{"username":"austin","password":"s3cure-Passw0rd!"}' | python -c "import sys,json;print(json.load(sys.stdin)['token'])")
 
 # Create (safe to repeat: the same key never creates a second post)
-curl -i -X POST localhost:8000/api/posts/ -H "Authorization: Token $TOKEN" \
+curl -i -X POST localhost:8000/api/v1/posts/ -H "Authorization: Token $TOKEN" \
   -H "Content-Type: application/json" -H "Idempotency-Key: 7f9c1a2e-0b1d-4c55-9a43-3c1e5e7d2f10" \
   -d '{"title":"Hello","content":"First post"}'
 
 # Conditional update
-curl -i -X PATCH localhost:8000/api/posts/1/ -H "Authorization: Token $TOKEN" \
+curl -i -X PATCH localhost:8000/api/v1/posts/1/ -H "Authorization: Token $TOKEN" \
   -H "Content-Type: application/json" -H 'If-Match: "1"' -d '{"content":"Edited"}'
 
 # Delete (safe to repeat)
-curl -i -X DELETE localhost:8000/api/posts/1/ -H "Authorization: Token $TOKEN"
+curl -i -X DELETE localhost:8000/api/v1/posts/1/ -H "Authorization: Token $TOKEN"
 ```
 
 ---
@@ -187,14 +188,14 @@ Views only handle HTTP concerns. The reliability logic lives in `idempotency.py`
 | **2. Connection drops before the response; user retries later** | Same mechanism. The stored response is replayed for 24 h (configurable). | The retry receives the original `201` (marked `Idempotent-Replayed: true`). No duplicate. |
 | **3. Update appears to fail and is resubmitted** | PUT/PATCH set absolute values, so they are naturally idempotent. If the post already holds the requested values, nothing is written and `200` is returned, even when the retry carries the now-stale `If-Match` from the first attempt. | A retry returns `200` with the same post. The version is not bumped twice. |
 | **4. Delete confirmation never arrives** | **Soft delete** keeps a tombstone (`deleted_at`). When the author repeats the delete, the server sees it is already done and returns `204` again. | Retrying a delete is safe and returns the same answer. Deleted posts are `404` for every read or write, and `404` for other users' deletes. |
-| **5. Two requests on the same post at almost the same time** | **Optimistic concurrency control.** Each write is a single conditional `UPDATE ... WHERE id=? AND version=?` run atomically by the database. Clients that send `If-Match` cannot overwrite a change they haven't seen; they get `412` plus the current post. An update racing a delete gets `404`. Two identical deletes both get `204`. | No lost updates, no half-applied state, no duplicate side effects, whether requests hit one server or many. |
+| **5. Two requests on the same post at almost the same time** | **Optimistic concurrency control.** Each write is a single conditional `UPDATE ... WHERE id=? AND version=?` run atomically by the database. Clients that send `If-Match` cannot overwrite a change they haven't seen; they get `412` plus the current post. An update racing a delete gets `404`. Two identical deletes both get `204`. | No lost updates, no half-applied state, no duplicate side effects, because the checks run in the database, not in application memory. |
 
 ### Why these choices
 
 - **Idempotency keys over content-based duplicate detection.** Rejecting identical title and content within N seconds is a guess. It blocks legitimate reposts and still fails when retries arrive late. A client-generated key states intent exactly. This is the approach used by Stripe and the IETF `Idempotency-Key` draft. The key is **required** by default so every client gets the guarantee; set `POSTS_IDEMPOTENCY_KEY_REQUIRED=false` to make it optional.
 - **The fingerprint guards against key misuse.** Each record stores a hash of method, path and validated payload. Reusing a key for a different request returns `422` instead of silently returning the wrong post.
 - **Only successful creates consume a key.** A `400` is not stored, so the user can fix the input and resubmit with the same key.
-- **The database enforces the guarantees, not the Python code.** Compare-and-swap updates and a unique constraint stay correct across multiple processes or servers, where in-process locks would not. On SQLite, transactions start in `IMMEDIATE` mode so concurrent writers queue instead of failing with "database is locked". On PostgreSQL, the unique constraint resolves the race and the losing request replays the winner's response (this path is tested).
+- **The database enforces the guarantees, not the Python code.** Compare-and-swap updates and a unique constraint stay correct across multiple processes or servers, where in-process locks would not. On SQLite, transactions start in `IMMEDIATE` mode so concurrent writers queue instead of failing with "database is locked". On PostgreSQL, the unique constraint is designed to resolve the race the same way; the test suite was run on SQLite.
 - **`If-Match` is optional.** Simple clients get atomic last-write-wins. Clients that care about conflicting edits from two devices opt into `412` protection using standard HTTP semantics (`ETag` / `If-Match`).
 - **No-op updates don't change `version`.** This is what makes a retried update with a stale ETag safe.
 - **Permissions.** `IsAuthenticated` everywhere, since this is a members-only university community, plus an object-level `IsAuthorOrReadOnly`. A missing post is checked before ownership, so you get `404` before `403`.
@@ -202,9 +203,13 @@ Views only handle HTTP concerns. The reliability logic lives in `idempotency.py`
 
 ### Trade-offs and possible extensions
 
-- A replayed create returns the response **as originally sent** (snapshot), even if the post was edited later. This matches common idempotency semantics.
-- Soft-deleted rows stay in the table. A periodic hard-delete job could remove old tombstones.
-- Possible next steps: rate limiting (DRF throttling), `If-None-Match`/`304` for cheaper polling, and CORS headers exposing `ETag` and `Idempotent-Replayed` for cross-origin SPAs.
+- **Required `Idempotency-Key`.** Requiring the header guarantees every client gets double-submit protection, but a client that doesn't send it gets a `400`. `POSTS_IDEMPOTENCY_KEY_REQUIRED=false` relaxes this.
+- **Replays are snapshots.** A retried create returns the response exactly as first sent, even if the post was edited or deleted in between. This matches common idempotency semantics, but the replay can be slightly stale.
+- **`If-Match` is optional.** Clients that omit it get atomic last-write-wins updates. Protection against overwriting someone else's edit applies only to clients that opt in.
+- **Soft deletes.** Keeping a tombstone makes a retried delete safe (`204`), but deleted rows stay in the table. A periodic hard-delete job would be needed in production.
+- **SQLite by default.** `IMMEDIATE` transactions make concurrent writers queue, which is fine at this scale but would not suit heavy write traffic. PostgreSQL is the production path. The test suite was run on SQLite only.
+- **Token authentication.** DRF tokens do not expire. That is acceptable here, but production would need expiry or rotation.
+- **Possible next steps:** rate limiting (DRF throttling), `If-None-Match`/`304` for cheaper polling, and CORS headers exposing `ETag` and `Idempotent-Replayed` for cross-origin SPAs.
 
 ---
 
@@ -214,6 +219,6 @@ Views only handle HTTP concerns. The reliability logic lives in `idempotency.py`
 
 - `posts/tests/test_crud.py`: create, list (pagination, ordering, author filter), retrieve, update (PUT/PATCH), delete; validation; 401/403/404 handling; token-auth flow; OpenAPI schema and Swagger UI / ReDoc endpoints.
 - `posts/tests/test_scenarios.py`: one test class per scenario in the brief: repeated clicks, retry after a lost response, key reuse with a different payload, per-user key scope, key expiry, database `UniqueConstraint` verification when the pre-check is bypassed, retried updates and deletes, stale `If-Match` → `412`, update racing a delete → `404`.
-- `posts/tests/test_concurrency.py`: **real multi-threaded tests**. Six threads with separate DB connections fire the same request at the same instant: one post is created from six simultaneous publishes, exactly one of six conditional edits wins (the rest get `412`), and six simultaneous deletes all return `204` while the delete is applied once.
+- `posts/tests/test_concurrency.py`: **real multi-threaded tests** (run against SQLite). Six threads with separate DB connections fire the same request at the same instant: one post is created from six simultaneous publishes, exactly one of six conditional edits wins (the rest get `412`), and six simultaneous deletes all return `204` while the delete is applied once.
 - `accounts/tests.py`: registration, password validation, token login.
 
