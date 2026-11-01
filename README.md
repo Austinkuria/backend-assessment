@@ -2,8 +2,8 @@
 
 A Django REST Framework backend for a university social network where students create, read, edit and delete posts. Beyond basic CRUD, the API is built to behave consistently when clients **retry**, **double-submit**, or **race** each other, which is what happens with flaky mobile connections.
 
-- **Stack:** Python 3.12+, Django 6.1, Django REST Framework 3.18, SQLite by default (PostgreSQL optional)
-- **Auth:** DRF token authentication (session auth also works for the browsable API)
+- **Stack:** Python 3.12+, Django 6.1, Django REST Framework 3.18, drf-spectacular 0.30 (OpenAPI 3 / Swagger UI), SQLite by default (PostgreSQL optional)
+- **Auth:** DRF token authentication (session auth also works for the browsable API and Swagger UI)
 
 ---
 
@@ -18,7 +18,10 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-The API runs at http://127.0.0.1:8000/api/. Open it in a browser and use **Log in** (top right) to try it through DRF's browsable API.
+The API runs at http://127.0.0.1:8000/api/.
+- **Swagger UI (interactive docs):** http://127.0.0.1:8000/api/docs/
+- **ReDoc:** http://127.0.0.1:8000/api/redoc/
+- **OpenAPI 3 schema:** http://127.0.0.1:8000/api/schema/
 
 ### Run the tests
 
@@ -95,7 +98,7 @@ Base URL: `/api/`. All request and response bodies are JSON. Every `/api/posts/`
 | `DELETE` | `/api/posts/{id}/` | author only | `204` no body |
 
 #### `GET /api/posts/`
-Query parameters: `page` (default 1), `author=<user id>` (optional filter).
+Query parameters: `page` (default 1, `PAGE_SIZE = 10` per page), `author=<user id>` (optional filter).
 ```json
 { "count": 31, "next": "http://.../api/posts/?page=2", "previous": null, "results": [ { "...post..." } ] }
 ```
@@ -201,16 +204,16 @@ Views only handle HTTP concerns. The reliability logic lives in `idempotency.py`
 
 - A replayed create returns the response **as originally sent** (snapshot), even if the post was edited later. This matches common idempotency semantics.
 - Soft-deleted rows stay in the table. A periodic hard-delete job could remove old tombstones.
-- Possible next steps: rate limiting (DRF throttling), `If-None-Match`/`304` for cheaper polling, CORS headers exposing `ETag`, and OpenAPI docs (drf-spectacular).
+- Possible next steps: rate limiting (DRF throttling), `If-None-Match`/`304` for cheaper polling, and CORS headers exposing `ETag` and `Idempotent-Replayed` for cross-origin SPAs.
 
 ---
 
 ## Tests
 
-`python manage.py test` runs **52 tests**:
+`python manage.py test` runs **56 tests**:
 
-- `posts/tests/test_crud.py`: create, list (pagination, ordering, author filter), retrieve, update (PUT/PATCH), delete; validation; 401/403/404 handling; token-auth flow.
-- `posts/tests/test_scenarios.py`: one test class per scenario in the brief: repeated clicks, retry after a lost response, key reuse with a different payload, per-user key scope, key expiry, a simulated PostgreSQL-style race on the unique constraint, retried updates and deletes, stale `If-Match` → `412`, update racing a delete → `404`.
+- `posts/tests/test_crud.py`: create, list (pagination, ordering, author filter), retrieve, update (PUT/PATCH), delete; validation; 401/403/404 handling; token-auth flow; OpenAPI schema and Swagger UI / ReDoc endpoints.
+- `posts/tests/test_scenarios.py`: one test class per scenario in the brief: repeated clicks, retry after a lost response, key reuse with a different payload, per-user key scope, key expiry, database `UniqueConstraint` verification when the pre-check is bypassed, retried updates and deletes, stale `If-Match` → `412`, update racing a delete → `404`.
 - `posts/tests/test_concurrency.py`: **real multi-threaded tests**. Six threads with separate DB connections fire the same request at the same instant: one post is created from six simultaneous publishes, exactly one of six conditional edits wins (the rest get `412`), and six simultaneous deletes all return `204` while the delete is applied once.
 - `accounts/tests.py`: registration, password validation, token login.
 

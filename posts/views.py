@@ -1,3 +1,5 @@
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import status, viewsets
 from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.generics import get_object_or_404
@@ -10,7 +12,45 @@ from .models import Post
 from .permissions import IsAuthorOrReadOnly
 from .serializers import PostSerializer
 
+IF_MATCH_HEADER = OpenApiParameter(
+    name="If-Match",
+    type=OpenApiTypes.STR,
+    location=OpenApiParameter.HEADER,
+    required=False,
+    description='Optional ETag / version of the post (e.g. `"1"`) to prevent overwriting concurrent edits.',
+)
 
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="List posts (newest first)",
+        parameters=[
+            OpenApiParameter(
+                name="author",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Filter posts by author user ID.",
+            ),
+        ],
+    ),
+    create=extend_schema(
+        summary="Publish a new post (idempotent)",
+        parameters=[
+            OpenApiParameter(
+                name=idempotency.IDEMPOTENCY_HEADER,
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.HEADER,
+                required=True,
+                description="Unique client-generated key (e.g. UUID) per publish action. Safe to reuse on retries.",
+            ),
+        ],
+    ),
+    retrieve=extend_schema(summary="Retrieve a single post"),
+    update=extend_schema(summary="Replace a post (author only)", parameters=[IF_MATCH_HEADER]),
+    partial_update=extend_schema(summary="Partially update a post (author only)", parameters=[IF_MATCH_HEADER]),
+    destroy=extend_schema(summary="Delete a post (author only, idempotent)", parameters=[IF_MATCH_HEADER]),
+)
 class PostViewSet(viewsets.ModelViewSet):
     """
     CRUD for posts.

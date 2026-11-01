@@ -176,6 +176,12 @@ class UpdatePostTests(PostTestMixin, APITestCase):
         response = self.client.patch(detail_url(9999), {"title": "x"})
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
+    def test_unauthenticated_user_cannot_update(self):
+        self.client.force_authenticate(None)
+        response = self.client.patch(self.url, {"title": "x"})
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(Post.objects.get().title, "Hello campus")
+
 
 class DeletePostTests(PostTestMixin, APITestCase):
     def setUp(self):
@@ -214,4 +220,19 @@ class TokenAuthenticationTests(PostTestMixin, APITestCase):
         response = self.client.post(LIST_URL, {"title": "t", "content": "c"}, headers={"Idempotency-Key": new_key()})
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["author"]["username"], "author")
+
+
+class OpenAPISchemaTests(PostTestMixin, APITestCase):
+    def test_schema_and_swagger_ui_endpoints_load_without_auth(self):
+        self.client.force_authenticate(None)
+
+        schema_res = self.client.get("/api/schema/", headers={"Accept": "application/json"})
+        self.assertEqual(schema_res.status_code, status.HTTP_200_OK)
+        self.assertIn("/api/posts/", schema_res.data["paths"])
+
+        swagger_res = self.client.get("/api/docs/")
+        self.assertEqual(swagger_res.status_code, status.HTTP_200_OK)
+
+        redoc_res = self.client.get("/api/redoc/")
+        self.assertEqual(redoc_res.status_code, status.HTTP_200_OK)
 
