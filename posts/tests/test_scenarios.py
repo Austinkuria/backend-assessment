@@ -6,9 +6,11 @@ each other on the same post.
 
 from datetime import timedelta
 from io import StringIO
+from types import SimpleNamespace
 from unittest import mock
 
 from django.core.management import call_command
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -16,7 +18,7 @@ from rest_framework.test import APITestCase
 from posts import idempotency
 from posts.models import IdempotencyRecord, Post
 
-from .helpers import PostTestMixin, detail_url, new_key
+from .helpers import LIST_URL, PostTestMixin, detail_url, new_key
 
 
 class DuplicatePublishTests(PostTestMixin, APITestCase):
@@ -121,6 +123,58 @@ class DuplicatePublishTests(PostTestMixin, APITestCase):
         call_command("purge_idempotency_records", stdout=StringIO())
 
         self.assertEqual(list(IdempotencyRecord.objects.values_list("key", flat=True)), ["fresh"])
+
+
+class DatabaseConstraintTests(PostTestMixin, APITestCase):
+    """
+    Scenario 5 at the lowest level: the database itself refuses a duplicate
+    key, so correctness does not depend on the application's pre-check.
+    """
+
+    PAYLOAD = {"title": "Hello", "content": "World"}
+
+    def _insert_record_directly(self, key):
+        """Create a post + its idempotency record straight in the DB, bypassing the API."""
+        post = Post.objects.create(author=self.author, **self.PAYLOAD)
+        request = SimpleNamespace(method="POST", path=LIST_URL)
+        return post, IdempotencyRecord.objects.create(
+            user=self.author,
+            key=key,
+            request_fingerprint=idempotency.fingerprint_request(request, self.PAYLOAD),
+            response_status=201,
+            response_body={"id": post.id, "version": 1, **self.PAYLOAD},
+        )
+
+    def test_unique_constraint_rejects_duplicate_key(self):
+        self._insert_record_directly("dup")
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            IdempotencyRecord.objects.create(
+                user=self.author, key="dup", request_fingerprint="x", response_status=201, response_body={}
+            )
+
+    def test_constraint_blocks_duplicate_when_precheck_is_bypassed(self):
+        key = new_key()
+        post, _ = self._insert_record_directly(key)
+
+        # Force the application's "has this key been used?" check to miss on the first call.
+        real_find = idempotency._find_record
+        with mock.patch.object(idempotency, "_find_record", side_effect=_miss_once_then(real_find)):
+            response = self.publish(self.PAYLOAD, key=key)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["id"], post.id)
+        self.assertEqual(response[idempotency.REPLAYED_HEADER], "true")
+        self.assertEqual(Post.all_objects.count(), 1)  # the duplicate insert was rolled back
+
+
+def _miss_once_then(real_find):
+    calls = {"n": 0}
+
+    def find(*args, **kwargs):
+        calls["n"] += 1
+        return None if calls["n"] == 1 else real_find(*args, **kwargs)
+
+    return find
 
 
 class RetriedUpdateTests(PostTestMixin, APITestCase):
